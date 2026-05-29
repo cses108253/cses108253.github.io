@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>粗細之尖：虛擬實驗操作模擬器</title>
+    <style>
+        :root { --primary: #2e7d32; --secondary: #1565c0; --accent: #fbc02d; }
+        body { font-family: "Microsoft JhengHei", sans-serif; background: #f0f2f5; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .lab-container { width: 1000px; background: #fff; border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.15); display: flex; overflow: hidden; }
+        
+        /* 左側導覽列 */
+        .sidebar { width: 250px; background: #263238; color: white; padding: 20px; }
+        .sidebar h3 { border-bottom: 1px solid #546e7a; padding-bottom: 10px; font-size: 1.1em; }
+        .nav-item { padding: 12px; margin: 8px 0; background: #37474f; border-radius: 6px; cursor: pointer; transition: 0.3s; font-size: 0.9em; }
+        .nav-item:hover { background: #455a64; }
+        .nav-item.active { background: var(--primary); border-left: 5px solid white; }
+
+        /* 右側操作區 */
+        .main-stage { flex: 1; padding: 20px; position: relative; display: flex; flex-direction: column; }
+        .canvas-area { height: 400px; border: 2px solid #ddd; border-radius: 8px; position: relative; background: #fafafa; overflow: hidden; }
+        .info-panel { height: 150px; margin-top: 15px; padding: 15px; background: #e8f5e9; border-radius: 8px; border-left: 5px solid var(--primary); overflow-y: auto; }
+        
+        /* 模擬器材物件樣式 */
+        .obj { position: absolute; transition: all 0.3s ease; cursor: grab; text-align: center; font-weight: bold; }
+        #soil-dish { bottom: 20px; left: 350px; width: 200px; height: 50px; background: #795548; border: 4px solid #5d4037; border-radius: 10px 10px 50px 50px; }
+        #meter { top: 20px; right: 20px; width: 120px; height: 160px; background: #ffd600; border-radius: 8px; border: 3px solid #fbc02d; }
+        #meter-screen { background: #9e9d24; color: #111; height: 40px; margin: 10px; font-family: monospace; font-size: 20px; display: flex; align-items: center; justify-content: center; }
+        #laser-device { top: 150px; left: 20px; width: 150px; height: 40px; background: #424242; border-radius: 5px; display: none; }
+        .laser-beam { position: absolute; height: 2px; top: 20px; left: 150px; display: none; }
+        .diffraction-pattern { position: absolute; right: 20px; top: 50px; width: 200px; height: 200px; background: black; border: 2px solid #333; display: none; }
+
+        /* 按鈕與標籤 */
+        .btn-group { margin-top: 10px; display: flex; gap: 10px; flex-wrap: wrap; }
+        button { padding: 8px 15px; border: none; border-radius: 4px; background: var(--primary); color: white; cursor: pointer; }
+        button:disabled { background: #ccc; }
+        .label { font-size: 0.8em; color: #555; }
+    </style>
+</head>
+<body>
+
+<h1>粗細之尖：植物根系與土壤電容互動實驗室</h1>
+
+<div class="lab-container">
+    <div class="sidebar">
+        <h3>實驗流程清單</h3>
+        <div class="nav-item active" onclick="loadExp(1)">實驗一：電容校正曲線</div>
+        <div class="nav-item" onclick="loadExp(2)">實驗二：最佳探針法</div>
+        <div class="nav-item" onclick="loadExp(3)">實驗三：萌芽資源密度</div>
+        <div class="nav-item" onclick="loadExp(4)">實驗四：雷射測距與分析</div>
+    </div>
+
+    <div class="main-stage">
+        <div class="canvas-area" id="stage">
+            <!-- 培養皿物件 (實驗核心) -->
+            <div id="soil-dish" class="obj">
+                <span style="color:white">100g 土壤</span>
+                <div id="plant-growth" style="display:flex; justify-content:center; margin-top:-25px"></div>
+            </div>
+
+            <!-- 電容計物件 -->
+            <div id="meter" class="obj">
+                <div id="meter-screen">0.00</div>
+                <div class="label">電容計 (nF)</div>
+                <div style="font-size:10px; margin-top:40px">探針電極法</div>
+            </div>
+
+            <!-- 雷射物件 -->
+            <div id="laser-device" class="obj">
+                <div id="laser-btn" style="width:20px; height:20px; background:red; border-radius:50%; margin:10px auto; cursor:pointer" onclick="toggleLaser()"></div>
+                <div class="laser-beam" id="beam"></div>
+            </div>
+            <div id="screen" class="diffraction-pattern"></div>
+        </div>
+
+        <div class="info-panel" id="exp-info">
+            <strong>實驗一說明：</strong> 秤取 98g 乾燥土壤 [1]。請點擊下方按鈕加入水分，觀察電容計數值的線性變化，建立 $C$ 與 $M_{水}/M_{土}$ 的關係式 [2, 3]。
+        </div>
+
+        <div class="btn-group" id="controls">
+            <!-- 動態生成按鈕 -->
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentExp = 1;
+    let water = 0;
+    let seeds = 0;
+    let laserOn = false;
+    let laserColor = 'green';
+
+    const stage = document.getElementById('stage');
+    const info = document.getElementById('exp-info');
+    const controls = document.getElementById('controls');
+    const meterScreen = document.getElementById('meter-screen');
+    const dish = document.getElementById('soil-dish');
+
+    function loadExp(num) {
+        currentExp = num;
+        document.querySelectorAll('.nav-item').forEach((item, idx) => {
+            item.classList.toggle('active', idx + 1 === num);
+        });
+        resetStage();
+        
+        if (num === 1) {
+            info.innerHTML = "<strong>實驗一：校正曲線</strong><br>原理：探針周遭形成介電場，大小由水土比決定 [4]。<br>操作：每次點擊「加水 10mL」，觀察讀數。";
+            controls.innerHTML = `<button onclick="addWater(10)">加入 10mL 水</button>`;
+        } else if (num === 2) {
+            info.innerHTML = "<strong>實驗二：測量法比較</strong><br>比較「鋅銅片法」與「探針電極法」 [5]。<br>操作：切換電極，鋅銅片法讀數較高但易受空氣干擾並氧化 [6]。";
+            controls.innerHTML = `<button onclick="setMethod('probe')">探針法</button><button onclick="setMethod('zinc')">鋅銅片法</button>`;
+        } else if (num === 3) {
+            info.innerHTML = "<strong>實驗三：種子密度</strong><br>原理：根毛生長會顯著消耗水分，導致電容下降 [2]。<br>操作：點擊「加入種子」至 20 顆（最佳化密度 [7]），然後點擊「生長」。";
+            controls.innerHTML = `<button onclick="addSeeds(5)">加入 5 顆種子</button><button onclick="simulateGrowth()">模擬生長 (第4天)</button>`;
+        } else if (num === 4) {
+            info.innerHTML = "<strong>實驗四：雷射干涉分析</strong><br>原理：利用公式 $d = \lambda L / 2S$ 計算根直徑 [7]。<br>請選擇雷射光，注意：藍/紫光雷射效果較差，綠光效果清晰 [8]。";
+            controls.innerHTML = `<button onclick="setLaser('green')">綠光雷射 (532nm)</button><button onclick="setLaser('violet')">紫光雷射 (藍光筆)</button>`;
+            document.getElementById('laser-device').style.display = 'block';
+        }
+    }
+
+    function addWater(amt) {
+        water += amt;
+        calculateC();
+    }
+
+    function addSeeds(amt) {
+        seeds += amt;
+        const growth = document.getElementById('plant-growth');
+        for(let i=0; i<amt; i++) growth.innerHTML += "🌱";
+    }
+
+    function calculateC() {
+        // 來源公式：C = -52.04 + 31.33 * [1 + 81*M水/(3.5*M土)] [1, 2]
+        let massSoil = 100;
+        let factor = 1 + (81 * water) / (3.5 * massSoil);
+        let c = -52.04 + (31.33 * factor);
+        meterScreen.innerText = Math.max(0, c).toFixed(2);
+    }
+
+    function setMethod(type) {
+        if (type === 'zinc') {
+            meterScreen.innerText = (parseFloat(meterScreen.innerText) * 1.5).toFixed(2);
+            info.innerText = "鋅銅片法：數值被放大，但須考慮金屬板接觸空氣的影響 [6]。";
+        } else {
+            calculateC();
+            info.innerText = "探針法：直接沒入土壤，排除空氣電容干擾，較為方便 [6]。";
+        }
+    }
+
+    function simulateGrowth() {
+        if (seeds > 0 && water > 0) {
+            water -= (seeds * 0.8); // 模擬根毛吸水
+            calculateC();
+            info.innerText = "生長結果：第 4 天根毛旺盛，水分散失最高，電容值大幅下降 [2, 9]。";
+        }
+    }
+
+    function setLaser(color) {
+        laserColor = color;
+        const beam = document.getElementById('beam');
+        beam.style.backgroundColor = (color === 'green') ? '#00ff00' : '#7f00ff';
+        beam.style.boxShadow = `0 0 10px ${beam.style.backgroundColor}`;
+        info.innerText = color === 'green' ? "綠光雷射：條紋清晰，方便計算 S 值 [8]。" : "藍紫光雷射：效果較不好，亮紋模糊 [8]。";
+    }
+
+    function toggleLaser() {
+        laserOn = !laserOn;
+        const beam = document.getElementById('beam');
+        const screen = document.getElementById('screen');
+        beam.style.display = laserOn ? 'block' : 'none';
+        screen.style.display = laserOn ? 'block' : 'none';
+        
+        if (laserOn) {
+            screen.innerHTML = (laserColor === 'green') 
+                ? "<div style='color:#0f0; margin-top:80px'>| | | | |<br>清晰亮紋 S</div>" 
+                : "<div style='color:#70f; margin-top:80px; filter:blur(2px)'>|||||<br>模糊條紋</div>";
+        }
+    }
+
+    function resetStage() {
+        water = 0; seeds = 0; laserOn = false;
+        meterScreen.innerText = "0.00";
+        document.getElementById('plant-growth').innerHTML = "";
+        document.getElementById('laser-device').style.display = 'none';
+        document.getElementById('beam').style.display = 'none';
+        document.getElementById('screen').style.display = 'none';
+    }
+
+    loadExp(1);
+</script>
+
+</body>
+</html>
