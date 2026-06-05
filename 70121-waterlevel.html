@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>o711 裝飲料水位變化視覺化</title>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; padding: 20px; background-color: #f4f4f9; }
+        .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        .input-group { margin-bottom: 10px; }
+        label { display: block; font-weight: bold; }
+        input { width: 90%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        button { padding: 10px 20px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+        button:hover { background-color: #0056b3; }
+        #visualization { display: flex; justify-content: center; margin-top: 30px; }
+        #cup-svg { background: #eee; border-radius: 4px; }
+        .status { margin-top: 20px; padding: 10px; border-left: 5px solid #007bff; background: #e9ecef; }
+        .max-rise { color: #d9534f; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>o711 裝飲料水位模擬</h1>
+    <p>輸入杯子尺寸與每次倒水的容量，觀看水位變化。</p>
+
+    <div class="controls">
+        <div class="input-group">
+            <label>w1 (下層寬度 cm)</label>
+            <input type="number" id="w1" value="10" min="1">
+        </div>
+        <div class="input-group">
+            <label>h1 (下層高度 cm)</label>
+            <input type="number" id="h1" value="10" min="1">
+        </div>
+        <div class="input-group">
+            <label>w2 (上層寬度 cm)</label>
+            <input type="number" id="w2" value="5" min="1">
+        </div>
+        <div class="input-group">
+            <label>h2 (上層高度 cm)</label>
+            <input type="number" id="h2" value="10" min="1">
+        </div>
+        <div class="input-group" style="grid-column: span 2;">
+            <label>每次倒水容量 (用空格或逗號隔開，例如: 100 200 50)</label>
+            <input type="text" id="volumes" value="200, 300, 500">
+        </div>
+    </div>
+
+    <button onclick="startSimulation()">開始模擬倒水</button>
+
+    <div id="visualization">
+        <svg id="cup-svg" width="400" height="400" viewBox="0 0 200 200"></svg>
+    </div>
+
+    <div id="status-area" class="status">
+        等待輸入...
+    </div>
+</div>
+
+<script>
+    function startSimulation() {
+        const w1 = parseInt(document.getElementById('w1').value);
+        const h1 = parseInt(document.getElementById('h1').value);
+        const w2 = parseInt(document.getElementById('w2').value);
+        const h2 = parseInt(document.getElementById('h2').value);
+        const vInput = document.getElementById('volumes').value;
+        const vList = vInput.split(/[\s,]+/).map(Number).filter(v => !isNaN(v));
+
+        const svg = document.getElementById('cup-svg');
+        const statusArea = document.getElementById('status-area');
+        
+        // 清空畫布
+        svg.innerHTML = '';
+        
+        // 比例計算 (假設最大總高度 50+50=100cm 對應 180px)
+        const scale = 180 / (h1 + h2);
+        const centerX = 100;
+        const bottomY = 190;
+
+        // 繪製杯子輪廓 (外框)
+        const drawRect = (w, h, yOffset, color, opacity, id) => {
+            const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+            const rectW = w * scale; // 簡化處理：2D 視覺寬度直接用 w 表示
+            const rectH = h * scale;
+            rect.setAttribute("x", centerX - rectW / 2);
+            rect.setAttribute("y", yOffset - rectH);
+            rect.setAttribute("width", rectW);
+            rect.setAttribute("height", rectH);
+            rect.setAttribute("fill", color);
+            rect.setAttribute("fill-opacity", opacity);
+            rect.setAttribute("stroke", "#333");
+            if (id) rect.setAttribute("id", id);
+            svg.appendChild(rect);
+        };
+
+        // 繪製杯子兩層結構
+        drawRect(w1, h1, bottomY, "none", 1); // 下層
+        drawRect(w2, h2, bottomY - (h1 * scale), "none", 1); // 上層
+
+        // 水位元素
+        const waterLower = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        waterLower.setAttribute("fill", "#007bff");
+        waterLower.setAttribute("fill-opacity", "0.6");
+        svg.appendChild(waterLower);
+
+        const waterUpper = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        waterUpper.setAttribute("fill", "#007bff");
+        waterUpper.setAttribute("fill-opacity", "0.6");
+        svg.appendChild(waterUpper);
+
+        let currentTotalVolume = 0;
+        let currentHeight = 0;
+        let maxRise = 0;
+        let step = 0;
+
+        statusArea.innerHTML = "開始倒水...<br>";
+
+        function updateWater(totalV) {
+            const cap1 = w1 * w1 * h1;
+            const cap2 = w2 * w2 * h2;
+            let h = 0;
+
+            if (totalV <= cap1) {
+                h = totalV / (w1 * w1);
+                // 更新下層水
+                const rectW = w1 * scale;
+                const rectH = h * scale;
+                waterLower.setAttribute("x", centerX - rectW / 2);
+                waterLower.setAttribute("y", bottomY - rectH);
+                waterLower.setAttribute("width", rectW);
+                waterLower.setAttribute("height", rectH);
+                waterUpper.setAttribute("height", 0);
+            } else {
+                const h_lower = h1;
+                let h_upper = (totalV - cap1) / (w2 * w2);
+                if (h_upper > h2) h_upper = h2; // 杯滿 [1]
+                h = h_lower + h_upper;
+
+                // 下層填滿
+                const rectW1 = w1 * scale;
+                const rectH1 = h1 * scale;
+                waterLower.setAttribute("x", centerX - rectW1 / 2);
+                waterLower.setAttribute("y", bottomY - rectH1);
+                waterLower.setAttribute("width", rectW1);
+                waterLower.setAttribute("height", rectH1);
+
+                // 更新上層水
+                const rectW2 = w2 * scale;
+                const rectH2 = h_upper * scale;
+                waterUpper.setAttribute("x", centerX - rectW2 / 2);
+                waterUpper.setAttribute("y", bottomY - rectH1 - rectH2);
+                waterUpper.setAttribute("width", rectW2);
+                waterUpper.setAttribute("height", rectH2);
+            }
+            return h;
+        }
+
+        const interval = setInterval(() => {
+            if (step < vList.length) {
+                let v = vList[step];
+                let prevH = currentHeight;
+                currentTotalVolume += v;
+                currentHeight = updateWater(currentTotalVolume);
+                let rise = currentHeight - prevH;
+                if (rise > maxRise) maxRise = rise;
+
+                statusArea.innerHTML += `第 ${step + 1} 次倒水: 加入 ${v}cm³，水位上升 ${rise}cm (總高: ${currentHeight}cm)<br>`;
+                step++;
+            } else {
+                clearInterval(interval);
+                statusArea.innerHTML += `<hr>模擬結束。<strong>最大水位上升量: <span class="max-rise">${maxRise} cm</span></strong>`;
+            }
+        }, 800);
+    }
+</script>
+
+</body>
+</html>
