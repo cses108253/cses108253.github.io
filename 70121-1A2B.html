@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>北極雪境 1A2B</title>
+
+<style>
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    font-family:"Microsoft JhengHei",sans-serif;
+}
+
+body{
+    min-height:100vh;
+    overflow:hidden;
+    background:
+    radial-gradient(circle at top,#5fa8ff 0%,#153a69 40%,#07111f 100%);
+    color:white;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+}
+
+.container{
+    width:90%;
+    max-width:700px;
+    padding:30px;
+    border-radius:30px;
+    background:rgba(255,255,255,.12);
+    backdrop-filter:blur(12px);
+    box-shadow:0 0 40px rgba(255,255,255,.15);
+    z-index:2;
+}
+
+h1{
+    text-align:center;
+    font-size:3rem;
+    margin-bottom:10px;
+    text-shadow:0 0 15px #9fe8ff;
+}
+
+.subtitle{
+    text-align:center;
+    color:#d9f4ff;
+    margin-bottom:25px;
+}
+
+.game-area{
+    display:flex;
+    gap:10px;
+}
+
+input{
+    flex:1;
+    padding:15px;
+    border:none;
+    border-radius:15px;
+    font-size:1.2rem;
+    text-align:center;
+}
+
+button{
+    padding:15px 25px;
+    border:none;
+    border-radius:15px;
+    cursor:pointer;
+    font-size:1rem;
+    background:#7ddfff;
+    color:#083049;
+    font-weight:bold;
+    transition:.3s;
+}
+
+button:hover{
+    transform:translateY(-3px);
+    background:#baf1ff;
+}
+
+.info{
+    margin-top:20px;
+    text-align:center;
+}
+
+.history{
+    margin-top:20px;
+    max-height:280px;
+    overflow:auto;
+}
+
+.record{
+    margin-bottom:10px;
+    padding:12px;
+    border-radius:12px;
+    background:rgba(255,255,255,.08);
+}
+
+.win{
+    color:#7dffbc;
+    font-weight:bold;
+    font-size:1.3rem;
+}
+
+.snow{
+    position:fixed;
+    top:-10px;
+    background:white;
+    border-radius:50%;
+    opacity:.8;
+    animation:fall linear infinite;
+}
+
+@keyframes fall{
+    from{
+        transform:translateY(-10px);
+    }
+    to{
+        transform:translateY(110vh);
+    }
+}
+
+.ice-line{
+    height:3px;
+    background:linear-gradient(
+        90deg,
+        transparent,
+        #a8efff,
+        transparent
+    );
+    margin:15px 0;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+
+    <h1>❄️ 北極雪境 1A2B ❄️</h1>
+
+    <p class="subtitle">
+        在暴風雪中找出神秘數字
+    </p>
+
+    <div class="ice-line"></div>
+
+    <div class="game-area">
+        <input
+            id="guess"
+            maxlength="4"
+            placeholder="輸入4位不重複數字"
+        >
+        <button onclick="checkGuess()">
+            猜！
+        </button>
+    </div>
+
+    <div class="info">
+        猜測次數：<span id="count">0</span>
+    </div>
+
+    <div class="history" id="history"></div>
+
+</div>
+
+<script>
+
+let answer = generateNumber();
+let count = 0;
+
+function generateNumber(){
+
+    let nums = [];
+
+    while(nums.length < 4){
+
+        let n = Math.floor(Math.random()*10);
+
+        if(!nums.includes(n)){
+            nums.push(n);
+        }
+    }
+
+    return nums.join('');
+}
+
+function checkGuess(){
+
+    let guess = document.getElementById("guess").value;
+
+    if(!/^\d{4}$/.test(guess)){
+        alert("請輸入4位數字");
+        return;
+    }
+
+    if(new Set(guess).size !== 4){
+        alert("數字不可重複");
+        return;
+    }
+
+    count++;
+    document.getElementById("count").textContent = count;
+
+    let A = 0;
+    let B = 0;
+
+    for(let i=0;i<4;i++){
+
+        if(guess[i]===answer[i]){
+            A++;
+        }
+        else if(answer.includes(guess[i])){
+            B++;
+        }
+    }
+
+    const history =
+    document.getElementById("history");
+
+    const div = document.createElement("div");
+    div.className = "record";
+
+    div.innerHTML =
+        `第 ${count} 次： ${guess}
+         ➜ ${A}A${B}B`;
+
+    history.prepend(div);
+
+    document.getElementById("guess").value="";
+
+    if(A===4){
+
+        const win =
+        document.createElement("div");
+
+        win.className="record win";
+
+        win.innerHTML=
+        `🎉 找到了！答案是 ${answer}<br>
+         共用了 ${count} 次`;
+
+        history.prepend(win);
+
+        setTimeout(()=>{
+
+            if(confirm("再挑戰一次北極任務？")){
+
+                answer = generateNumber();
+                count = 0;
+
+                document.getElementById("count")
+                .textContent = "0";
+
+                history.innerHTML="";
+            }
+
+        },300);
+    }
+}
+
+function createSnow(){
+
+    const snow =
+    document.createElement("div");
+
+    snow.classList.add("snow");
+
+    const size =
+    Math.random()*8+3;
+
+    snow.style.width=size+"px";
+    snow.style.height=size+"px";
+
+    snow.style.left=
+    Math.random()*100+"vw";
+
+    snow.style.animationDuration=
+    Math.random()*5+4+"s";
+
+    document.body.appendChild(snow);
+
+    setTimeout(()=>{
+        snow.remove();
+    },10000);
+}
+
+setInterval(createSnow,80);
+
+</script>
+
+</body>
+</html>
